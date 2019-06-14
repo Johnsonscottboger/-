@@ -1,11 +1,11 @@
-﻿using NPOI.HSSF.UserModel;
-using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using NPOI.HSSF.UserModel;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
 using 降水侵蚀力计算.Model;
 
 namespace 降水侵蚀力计算.Operator
@@ -80,7 +80,7 @@ namespace 降水侵蚀力计算.Operator
         /// <param name="mergeSamColumn">同一行中相邻列的值相同, 则合并</param>
         /// <param name="mergeSameRow">同一列中相邻行的值相同, 则合并</param>
         /// <param name="dataGrid">指定的数据</param>
-        internal void Write(string targetFileName, string templateFileName, ExcelDataGrid dataGrid, int sheetIndex = 0, bool mergeSameRow = false, bool mergeSamColumn = false)
+        internal void Write(string targetFileName, string templateFileName, ExcelDataGrid dataGrid, int sheetIndex = 0, string sheetName = null, bool mergeSameRow = false, bool mergeSamColumn = false)
         {
             if (string.IsNullOrWhiteSpace(targetFileName))
             {
@@ -102,9 +102,20 @@ namespace 降水侵蚀力计算.Operator
             {
                 throw new ArgumentException("不支持的文件扩展名");
             }
-            var sheet = workbook.GetSheetAt(sheetIndex);
-            if (sheet == null)
-                sheet = workbook.CreateSheet();
+            ISheet sheet;
+            try
+            {
+                sheet = workbook.GetSheetAt(sheetIndex);
+                if (!string.IsNullOrEmpty(sheetName))
+                    workbook.SetSheetName(sheetIndex, sheetName);
+            }
+            catch (ArgumentException)
+            {
+                if (string.IsNullOrEmpty(sheetName))
+                    sheet = workbook.CreateSheet();
+                else
+                    sheet = workbook.CreateSheet(sheetName);
+            }
             var rowIndex = -1;
             foreach (var row in dataGrid.Rows)
             {
@@ -125,30 +136,58 @@ namespace 降水侵蚀力计算.Operator
                         if (excelColumn.CellStyle == null)
                             excelColumn.CellStyle = workbook.CreateCellStyle();
                         excelColumn.CellStyle.Alignment = HorizontalAlignment.Center;
-                        excelColumn.CellStyle.VerticalAlignment = VerticalAlignment.Center; 
-                        excelColumn.SetCellValue(value.Value);
+                        excelColumn.CellStyle.VerticalAlignment = VerticalAlignment.Center;
+                        var @string = value.Value as string;
+                        if (@string != null)
+                        {
+                            excelColumn.SetCellValue(@string);
+                        }
+                        var @bool = value.Value as bool?;
+                        if (@bool != null)
+                        {
+                            excelColumn.SetCellValue(@bool.Value);
+                        }
+                        var dateTime = value.Value as DateTime?;
+                        if (dateTime != null)
+                        {
+                            excelColumn.SetCellValue(dateTime.Value);
+                            var cellStyle = workbook.CreateCellStyle();
+                            var format = workbook.CreateDataFormat();
+                            cellStyle.Alignment = HorizontalAlignment.Center;
+                            cellStyle.VerticalAlignment = VerticalAlignment.Center;
+                            cellStyle.DataFormat = format.GetFormat(value.Format ?? "yyyy-MM-dd HH:mm:ss");
+                            excelColumn.CellStyle = cellStyle;
+                            sheet.AutoSizeColumn(columnIndex);
+                        }
+                        if (value.Value is double
+                           || value.Value is float
+                           || value.Value is int
+                           || value.Value is decimal)
+                        {
+                            excelColumn.SetCellValue((double)value.Value);
+                        }
                     }
-                    //sheet.AutoSizeColumn(columnIndex);
+
                 }
             }
 
-            if(mergeSameRow)
+            if (mergeSameRow)
             {
                 var columnCount = dataGrid.Rows.Max(p => p.Columns.Count);
-                for(var columnIndex = 0; columnIndex < columnCount; columnIndex++)
+                for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
                 {
                     var firstRowIndex = 0;
                     var lastRowIndex = 0;
-                    for(rowIndex = 0; rowIndex < dataGrid.Rows.Count; rowIndex++)
+                    for (rowIndex = 0; rowIndex < dataGrid.Rows.Count; rowIndex++)
                     {
                         var curtRow = dataGrid.Rows[rowIndex].Columns[columnIndex];
-                        if(curtRow == null || string.IsNullOrEmpty(curtRow.Value))
+                        if (curtRow == null || curtRow.Value == null || string.IsNullOrEmpty(curtRow.Value as string))
                         {
                             lastRowIndex = rowIndex;
                         }
                         else
                         {
-                            if(lastRowIndex - firstRowIndex > 0)
+                            if (lastRowIndex - firstRowIndex > 0)
                             {
                                 sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(firstRowIndex, lastRowIndex, columnIndex, columnIndex));
                             }

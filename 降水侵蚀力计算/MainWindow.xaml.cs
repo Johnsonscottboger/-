@@ -51,7 +51,7 @@ namespace 降水侵蚀力计算
                 catch(Exception ex)
                 {
                     Debug.WriteLine(ex);
-                    MessageBox.Show("发生异常", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show($"发生异常\r\n{ex.Message}", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
         }

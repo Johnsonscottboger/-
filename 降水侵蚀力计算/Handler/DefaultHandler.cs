@@ -14,6 +14,11 @@ namespace 降水侵蚀力计算.Handler
     internal class DefaultHandler : BaseOperator, IHandler
     {
         /// <summary>
+        /// 获取原始文件名
+        /// </summary>
+        private string SourceFileName { get; set; }
+
+        /// <summary>
         /// 获取文件名
         /// </summary>
         public string FileName { get; private set; }
@@ -24,7 +29,11 @@ namespace 降水侵蚀力计算.Handler
         /// <param name="fileName">指定的文件名</param>
         public DefaultHandler(string fileName)
         {
-            this.FileName = fileName ?? throw new ArgumentNullException(nameof(fileName));
+            var fi = new FileInfo(fileName);
+            var fileNameCopy = $"{fileName}.{DateTime.Now.ToString("yyyyMMddHHmmssfff")}{fi.Extension}";
+            File.Copy(fileName, fileNameCopy);
+            this.SourceFileName = fileName ?? throw new ArgumentNullException(nameof(fileName));
+            this.FileName = fileNameCopy ?? throw new ArgumentNullException(nameof(fileName));
         }
 
         /// <summary>
@@ -38,6 +47,9 @@ namespace 降水侵蚀力计算.Handler
             RinfallPartition(records);
 
             RainfallDaySum(records);
+
+            File.Copy(this.FileName, this.SourceFileName, true);
+            File.Delete(this.FileName);
         }
 
         #region - Private -
@@ -124,14 +136,14 @@ namespace 降水侵蚀力计算.Handler
             foreach (var item in list)
             {
                 rowIndex++;
-                dataGrid[rowIndex, 0] = item.Number == lastNumber ? CellValue.Skip : item.Number.ToString();
-                dataGrid[rowIndex, 1] = item.DateTime.ToString("yyyy-MM-dd HH:mm");
-                dataGrid[rowIndex, 2] = item.Precipitation30.ToString();
-                dataGrid[rowIndex, 3] = item.Precipitation15.ToString();
-                dataGrid[rowIndex, 4] = item.Number == lastNumber ? CellValue.Skip : list.Where(p => p.Number == item.Number).Sum(p => p.Precipitation30).ToString();
+                dataGrid[rowIndex, 0] = item.Number == lastNumber ? CellValue.Skip : item.Number;
+                dataGrid[rowIndex, 1] = item.DateTime;
+                dataGrid[rowIndex, 2] = item.Precipitation30;
+                dataGrid[rowIndex, 3] = item.Precipitation15;
+                dataGrid[rowIndex, 4] = item.Number == lastNumber ? CellValue.Skip : list.Where(p => p.Number == item.Number).Sum(p => p.Precipitation30);
                 lastNumber = item.Number;
             }
-            Fill(dataGrid, 2);
+            Fill(dataGrid, 2, "划分次降水");
             return list;
         }
 
@@ -152,24 +164,24 @@ namespace 降水侵蚀力计算.Handler
         {
             var list = new List<DaySumRecord>();
 
-            records.Where(p => p.Precipitation30 > 0)
-                   .GroupBy(p => p.DateTime.Date)
-                   .Select(p =>
-                   {
-                       var sum = p.Sum(c => c.Precipitation30);
-                       foreach(var item in p)
-                       {
-                           list.Add(new DaySumRecord
-                           {
-                               Date = p.Key,
-                               DateTime = item.DateTime,
-                               Precipitation15 = item.Precipitation15,
-                               Precipitation30 = item.Precipitation30,
-                               PrecipitationSum = sum
-                           });
-                       }
-                       return 0;
-                   }).ToList();
+            var lst = records.Where(p => p.Precipitation30 > 0)
+                             .GroupBy(p => p.DateTime.Date)
+                             .Select(p =>
+                             {
+                                 var sum = p.Sum(c => c.Precipitation30);
+                                 foreach(var item in p)
+                                 {
+                                     list.Add(new DaySumRecord
+                                     {
+                                         Date = p.Key,
+                                         DateTime = item.DateTime,
+                                         Precipitation15 = item.Precipitation15,
+                                         Precipitation30 = item.Precipitation30,
+                                         PrecipitationSum = sum
+                                     });
+                                 }
+                                 return 0;
+                             }).ToList();
 
             var dataGrid = new ExcelDataGrid();
             dataGrid[0, 0] = "日期";
@@ -182,15 +194,16 @@ namespace 降水侵蚀力计算.Handler
             foreach(var item in list)
             {
                 rowIndex++;
-                dataGrid[rowIndex, 0] = item.Date == lastDate ? CellValue.Skip : item.Date.ToString("yyyy-MM-dd");
-                dataGrid[rowIndex, 1] = item.DateTime.ToString("yyyy-MM-dd HH:mm");
-                dataGrid[rowIndex, 2] = item.Precipitation30.ToString();
-                dataGrid[rowIndex, 3] = item.Precipitation15.ToString();
-                dataGrid[rowIndex, 4] = item.Date == lastDate ? CellValue.Skip : item.PrecipitationSum.ToString();
+                
+                dataGrid[rowIndex, 0] = item.Date == lastDate ? CellValue.Skip : new CellValue(item.Date, "yyyy-MM-dd");
+                dataGrid[rowIndex, 1] = item.DateTime;
+                dataGrid[rowIndex, 2] = item.Precipitation30;
+                dataGrid[rowIndex, 3] = item.Precipitation15;
+                dataGrid[rowIndex, 4] = item.Date == lastDate ? CellValue.Skip : item.PrecipitationSum;
                 lastDate = item.Date;
             }
 
-            Fill(dataGrid, 3);
+            Fill(dataGrid, 3, "日降水量");
         }
         #endregion
 
@@ -206,9 +219,9 @@ namespace 降水侵蚀力计算.Handler
                 return list;
             foreach (var row in dataGrid.Rows)
             {
-                if (DateTime.TryParse(row.Columns[0].Value, out var dateTime)
-                    && decimal.TryParse(row.Columns[1].Value, out var p30)
-                    && decimal.TryParse(row.Columns[2].Value, out var p15))
+                if (DateTime.TryParse(row.Columns[0].Value.ToString(), out var dateTime)
+                    && decimal.TryParse(row.Columns[1].Value.ToString(), out var p30)
+                    && decimal.TryParse(row.Columns[2].Value.ToString(), out var p15))
                 {
                     list.Add(new Record()
                     {
@@ -221,14 +234,18 @@ namespace 降水侵蚀力计算.Handler
             return list;
         }
 
-
-        private void Fill(ExcelDataGrid dataGrid, int sheetIndex)
+        /// <summary>
+        /// 填充 Excel
+        /// </summary>
+        /// <param name="dataGrid">填充的 Excel 数据网格</param>
+        /// <param name="sheetIndex">指定填充的 sheet</param>
+        private void Fill(ExcelDataGrid dataGrid, int sheetIndex, string sheetName)
         {
             var targetFileName = this.FileName;
             var fi = new FileInfo(targetFileName);
             var templateFileName = $"{fi.Name} - Template{fi.Extension}";
             File.Copy(targetFileName, templateFileName, true);
-            Write(targetFileName, templateFileName, dataGrid, sheetIndex, true);
+            Write(targetFileName, templateFileName, dataGrid, sheetIndex, sheetName, true);
             File.Delete(templateFileName);
         }
 

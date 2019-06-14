@@ -85,7 +85,12 @@ namespace 降水侵蚀力计算.Model
         /// <summary>
         /// 实际值
         /// </summary>
-        public string Value { get; set; }
+        public object Value { get; set; }
+
+        /// <summary>
+        /// 获取或设置单元格格式
+        /// </summary>
+        public string Format { get; set; }
 
         /// <summary>
         /// 指示当前单元格为无效数据, 返回字符串 "-"
@@ -106,14 +111,55 @@ namespace 降水侵蚀力计算.Model
         /// 使用指定实际值初始化单元格数据
         /// </summary>
         /// <param name="value">将初始化为单元格实际值</param>
-        public CellValue(string value)
+        public CellValue(object value)
         {
             this.Value = value;
+        }
+
+        /// <summary>
+        /// 初始化单元格数据
+        /// </summary>
+        /// <param name="value">指定的实际值</param>
+        /// <param name="format">指定的显示格式</param>
+        public CellValue(object value, string format)
+        {
+            this.Value = value;
+            this.Format = format;
         }
 
         public static implicit operator CellValue(string value)
         {
             return new CellValue(value);
+        }
+
+        public static implicit operator CellValue(bool value)
+        {
+            return new CellValue(value);
+        }
+
+        public static implicit operator CellValue(DateTime value)
+        {
+            return new CellValue(value);
+        }
+
+        public static implicit operator CellValue(double value)
+        {
+            return new CellValue(value);
+        }
+
+        public static implicit operator CellValue(float value)
+        {
+            return new CellValue((double)value);
+        }
+
+        public static implicit operator CellValue(int value)
+        {
+            return new CellValue((double)value);
+        }
+
+        public static implicit operator CellValue(decimal value)
+        {
+            return new CellValue((double)value);
         }
 
         /// <summary>
